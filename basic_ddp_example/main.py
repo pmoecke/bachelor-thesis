@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# Use different approach in this file, the other one produced an error regarding data_parallel(), which 
+# evaluates a model in parallel
 import os
 from unittest import TestLoader
 import torch
@@ -48,6 +50,13 @@ def get_mnist(is_train):
                                         ]))
     return mnist
 
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+
+    # initialize the process group
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+
 def cleanup():
     dist.destroy_process_group()
 
@@ -88,8 +97,9 @@ def test(model, test_loader):
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
 
-def run(rank, size):
+def run(rank, world_size):
     """ Distributed function to be run on each GPU. """
+    # Manually set batch size for now, later parsed
     BATCHSIZE = 64
     torch.manual_seed(1234)
 
@@ -104,22 +114,22 @@ def run(rank, size):
         train_data = get_mnist(True)
     
     test_data = get_mnist(False)
-    batchsz = BATCHSIZE // size
+    batchsz = BATCHSIZE // world_size  # Split up batch to all gpus
 
     train_kwargs = {"batch_size": batchsz}
     test_kwargs = {"batch_size": BATCHSIZE}
-    cuda_kwargs = {"num_workers": 1, "pin_memory": True, "shuffle": True}
+    cuda_kwargs = {"num_workers": 1, "pin_memory": True, "shuffle": True}  # Need to test out different settings
     train_kwargs.update(cuda_kwargs)
     test_kwargs.update(cuda_kwargs)
 
-    train_sampler = DistributedSampler(train_data, num_replicas=size, rank=rank)
+    train_sampler = DistributedSampler(train_data, num_replicas=world_size, rank=rank)
     train_kwargs.update(
         {
             "sampler": train_sampler,
             "shuffle": False,
         }
     )
-    trainloader = DataLoader(train_data, **train_kwargs)
+    trainloader = DataLoader(train_data, **train_kwargs)  # loog up how exactly the **kwargs args are passed, i.e meaning of **
     testloader = DataLoader(test_data, **test_kwargs)
 
     model = Net().to(rank)
@@ -131,26 +141,14 @@ def run(rank, size):
         train(ddp_model, trainloader, optimizer, epoch)
         test(ddp_model, testloader)
 
+    cleanup()
 
-def init_process(rank, size, fn, backend='nccl'):
-    """ Initialize the distributed environment. """
-    os.environ['MASTER_ADDR'] = '127.0.0.1'
-    os.environ['MASTER_PORT'] = '29500'
-
-    torch.cuda.set_device(rank)
-    dist.init_process_group(backend, rank=rank, world_size=size)
-    fn(rank, size)
+def main():
+    # Set the number of gpus manually for now, later the argument should be able to be parsed when executing the script
+    world_size = 2
+    mp.spawn(run, args=(world_size), nprocs=world_size, join=True)  # read documentation to understand how processes are spawned
 
 
 # Use two GPUs in this example
 if __name__ == "__main__":
-    size = 2  # worldsize
-    processes = []
-    mp.set_start_method("spawn")
-    for rank in range(size):
-        p = mp.Process(target=init_process, args=(rank, size, run))
-        p.start()
-        processes.append(p)
-
-    for p in processes:
-        p.join()
+    main()

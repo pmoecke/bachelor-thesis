@@ -2,7 +2,6 @@
 # Use different approach in this file, the other one produced an error regarding data_parallel(), which 
 # evaluates a model in parallel
 import os
-from unittest import TestLoader
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -100,6 +99,8 @@ def test(model, test_loader):
 def run(rank, world_size):
     """ Distributed function to be run on each GPU. """
     # Manually set batch size for now, later parsed
+    setup(rank, world_size)
+
     BATCHSIZE = 64
     torch.manual_seed(1234)
 
@@ -139,7 +140,12 @@ def run(rank, world_size):
     epochs = 20
     for epoch in range(1, epochs + 1):
         train(ddp_model, trainloader, optimizer, epoch)
-        test(ddp_model, testloader)
+        # Let only the first GPU compute the test cases for now, can also be parallelized
+        if rank == 0:
+            test(ddp_model, testloader)
+            torch.distributed.barrier()
+        else:
+            torch.distributed.barrier()
 
     cleanup()
 

@@ -56,6 +56,7 @@ def setup(rank, world_size):
     # initialize the process group
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
+# TODO: Input should be a GradBucket and not a Tensor, can I still use stuff like send/recv or only allreduce???
 def adasum_rvh(gradient:torch.Tensor, distance):
     """
     train_data corresponds to a local gradient calculated on a microbatch. This functions combines
@@ -114,6 +115,7 @@ def train(model, train_loader, optimizer, epoch, args):
         loss.backward()  # Compute local gradient
 
         # How to apply Adasum?
+        # TODO: Use DDP communication hooks
         for param in model.parameters():
             param.grad.data = adasum_rvh(param.grad.data, 1)  # This would spawn much to many sub-processes, communication channels
 

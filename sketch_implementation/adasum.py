@@ -6,18 +6,7 @@ from bagua.torch_api.communication import BaguaProcessGroup
 from bagua.torch_api.communication import recv
 from bagua.torch_api.communication import send
 from bagua.torch_api.communication import allreduce
-from . import env
-from .env import (
-    get_master_addr,
-    get_world_size,
-    get_rank,
-    get_local_rank,
-    get_node_rank,
-    get_default_bucket_size,
-    get_bagua_service_port,
-    get_autotune_server_wait_time,
-    find_free_network_port,
-)
+import bagua.torch_api as bagua
 from torch.optim.optimizer import Optimizer
 import torch
 import math
@@ -28,23 +17,24 @@ class AdasumAlgorithmImpl(AlgorithmImpl):
         super(AdasumAlgorithmImpl, self).__init__(process_group)
 
     def init_post_backward_hook(self, bagua_ddp: BaguaDistributedDataParallel):
-        def hook_adasum(gradient: BaguaBucket, distance):
+        def hook_adasum(gradient: BaguaBucket, distance = 1):
             """
             train_data corresponds to a local gradient calculated on a microbatch. This functions combines
             the different gradients computed on each GPU individually to a global gradient.
             Microbatches are distrinct, i.e. share no data points, and together form one minibatch.
             """
-            rank = get_rank() 
-            world_size = get_world_size()
+            rank = bagua.get_rank() 
+            world_size = bagua.get_world_size()
 
-            # TODO: have to get length of BaguaBucket, i.e. number of elements. Assume its flattened??
-
+            # TODO: have to get length of BaguaBucket, i.e. number of elements. Assume its flattened for now
+            
+            
 
         return hook_adasum
 
 
 class AdasumAlgorith (Algorithm):
-    def __init__(self, q_adam_optimizer: QAdamOptimizer, hierarchical: bool = True):
+    def __init__(self, hierarchical: bool = False):
         """
         Create an instance of the
         `QAdam Algorithm <https://tutorials.baguasys.com/algorithms/q-adam>`_
@@ -54,7 +44,6 @@ class AdasumAlgorith (Algorithm):
             hierarchical: Enable hierarchical communication.
         """
         self.hierarchical = hierarchical
-        self.optimizer = q_adam_optimizer
 
     def reify(self, process_group: BaguaProcessGroup) -> AdasumAlgorithmImpl:
         return AdasumAlgorithmImpl(process_group)

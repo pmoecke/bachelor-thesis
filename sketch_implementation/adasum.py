@@ -17,17 +17,35 @@ class AdasumAlgorithmImpl(AlgorithmImpl):
         super(AdasumAlgorithmImpl, self).__init__(process_group)
 
     def init_post_backward_hook(self, bagua_ddp: BaguaDistributedDataParallel):
-        def hook_adasum(gradient: BaguaBucket, distance = 1):
+        def hook_adasum():
             """
             train_data corresponds to a local gradient calculated on a microbatch. This functions combines
             the different gradients computed on each GPU individually to a global gradient.
             Microbatches are distrinct, i.e. share no data points, and together form one minibatch.
             """
+            distance = 1
             rank = bagua.get_rank() 
             world_size = bagua.get_world_size()
 
+            # TODO: Assume BaguaBucket is flattened and contains only one BaguaTensor. How get access to bucket/gradients? 
+
+            gradient = input_bucket[0].bagua_getter_closure()  # extracts gradients from params and returns torch.Tensor. Overhead?
+            mid = math.floor(len(gradient)/2)
+
+            if math.floor(rank / distance) % 2 == 0:
+                neighbor = rank + distance
+                bagua.send()         # Send right half              
+                dist.recv(tensor=left_half, src=neigbor)           # Receive left half
+            else:
+                neigbor = rank - distance
+                dist.send(tensor=left_half, dst=neighbor)
+                dist.recv(tensor=right_half, src=neighbor)
+
             # TODO: have to get length of BaguaBucket, i.e. number of elements. Assume its flattened for now
+            # i.e. the list of BaguaTensor in BaguaBucket will have only one element.
             
+
+
             
 
         return hook_adasum

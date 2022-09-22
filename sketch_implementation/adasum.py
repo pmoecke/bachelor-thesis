@@ -1,5 +1,3 @@
-from bagua.torch_api.bucket import BaguaBucket
-from bagua.torch_api.tensor import BaguaTensor
 from bagua.torch_api.data_parallel.bagua_distributed import BaguaDistributedDataParallel
 from bagua.torch_api.algorithms import Algorithm, AlgorithmImpl
 from bagua.torch_api.communication import BaguaProcessGroup
@@ -8,7 +6,6 @@ from bagua.torch_api.communication import send
 from bagua.torch_api.communication import allreduce
 from bagua.torch_api.communication import new_group
 import bagua.torch_api as bagua
-from torch.optim.optimizer import Optimizer
 import torch
 import math
 from typing import List, Tuple
@@ -27,8 +24,7 @@ class AdasumAlgorithmImpl(AlgorithmImpl):
             """
             Still need to write
             """
-            def adasum(torch.Tensor: gradient, distance, world_size):
-                distance = 1
+            def adasum(gradient: torch.Tensor, distance, world_size):
                 rank = bagua.get_rank()
                 mid = math.floor(gradient.size()[0]/2)  # split current gradient across first dimension
 
@@ -57,7 +53,8 @@ class AdasumAlgorithmImpl(AlgorithmImpl):
                     is_left = False
 
                 new_distance = 2 * distance
-                dim_cnt = len(own_half.size())
+                dim_cnt = len(dim_left)  # length is the same for dim_right
+
                 dot_product = torch.tensordot(grad_a, grad_b, dims=dim_cnt)
                 norm_a = torch.tensordot(grad_a, grad_a, dims=dim_cnt)
                 norm_b = torch.tensordot(grad_b, grad_b, dims=dim_cnt)
@@ -89,12 +86,12 @@ class AdasumAlgorithmImpl(AlgorithmImpl):
             for group in self.optimizer.param_groups:
                 for param in group["params"]:
                     # Maybe need a synchronization point here
-                    param.grad = adasum(param.grad, world_size)  # Do I need to overwrite the gradients??      
+                    param.grad = adasum(param.grad, 1, world_size)  # Do I need to overwrite the gradients??
 
         return hook_adasum
 
 
-class AdasumAlgorith (Algorithm):
+class AdasumAlgorithm (Algorithm):
     def __init__(self, sgd_optimizer: torch.optim.SGD, hierarchical: bool = False):
         """
         Create an instance of the

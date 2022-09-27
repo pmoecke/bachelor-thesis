@@ -253,9 +253,9 @@ def main():
             sync_interval_ms=args.async_sync_interval,
         )
     elif args.algorithm == "adasum":
-        import adasum
+        import adasum2
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
-        algorithm = adasum.AdasumAlgorithm(optimizer)
+        algorithm = adasum2.AdasumAlgorithm(optimizer)
     
     else:
         raise NotImplementedError
